@@ -31,9 +31,7 @@ module Philiprehberger
         if File.exist?(@pid_path)
           existing_pid = read_pid
 
-          if existing_pid && process_alive?(existing_pid)
-            raise Error, "Lock '#{@name}' is held by process #{existing_pid}"
-          end
+          raise Error, "Lock '#{@name}' is held by process #{existing_pid}" if existing_pid && process_alive?(existing_pid)
 
           # Stale PID file — remove it
           FileUtils.rm_f(@pid_path)
