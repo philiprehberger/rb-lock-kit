@@ -17,12 +17,13 @@ module Philiprehberger
     # @param timeout [Numeric, nil] seconds to wait before raising
     # @param auto_cleanup [Boolean] automatically remove stale locks before acquiring
     # @param on_wait [Proc, nil] callback invoked every 0.5s while waiting; receives elapsed seconds
+    # @param ttl [Numeric, nil] time-to-live in seconds; lock expires after this duration
     # @yield block to execute while the lock is held
     # @return [Object] the return value of the block
     # @raise [Error] if the lock cannot be acquired
-    def self.with_file_lock(path, timeout: nil, auto_cleanup: false, on_wait: nil, &block)
+    def self.with_file_lock(path, timeout: nil, auto_cleanup: false, on_wait: nil, ttl: nil, &block)
       lock = FileLock.new(path)
-      lock.acquire(timeout: timeout, auto_cleanup: auto_cleanup, on_wait: on_wait)
+      lock.acquire(timeout: timeout, auto_cleanup: auto_cleanup, on_wait: on_wait, ttl: ttl)
       begin
         block.call
       ensure
@@ -35,12 +36,13 @@ module Philiprehberger
     # @param name [String] lock name
     # @param dir [String] directory for the PID file
     # @param auto_cleanup [Boolean] automatically remove stale locks before acquiring
+    # @param ttl [Numeric, nil] time-to-live in seconds; lock expires after this duration
     # @yield block to execute while the lock is held
     # @return [Object] the return value of the block
     # @raise [Error] if the lock is held by another process
-    def self.with_pid_lock(name, dir: Dir.tmpdir, auto_cleanup: false, &block)
+    def self.with_pid_lock(name, dir: Dir.tmpdir, auto_cleanup: false, ttl: nil, &block)
       lock = PidLock.new(name, dir: dir)
-      lock.acquire(auto_cleanup: auto_cleanup)
+      lock.acquire(auto_cleanup: auto_cleanup, ttl: ttl)
       begin
         block.call
       ensure
@@ -120,6 +122,33 @@ module Philiprehberger
     rescue Errno::ESRCH
       true
     rescue Errno::EPERM
+      false
+    end
+
+    # Check if a lock has expired based on its TTL
+    #
+    # @param path [String] path to the lock file or PID file
+    # @return [Boolean] true if the lock metadata contains an expires_at time that has passed
+    def self.expired?(path)
+      # Check file lock metadata
+      meta_path = "#{path}.meta"
+      target = if File.exist?(meta_path)
+                 meta_path
+               elsif File.exist?(path)
+                 path
+               end
+
+      return false unless target
+
+      content = File.read(target).strip
+      return false if content.empty?
+
+      data = JSON.parse(content)
+      expires_at = data['expires_at']
+      return false unless expires_at
+
+      Time.parse(expires_at) <= Time.now
+    rescue JSON::ParserError, Errno::ENOENT
       false
     end
 

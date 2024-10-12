@@ -1,35 +1,37 @@
 name: Feature Request
-description: Suggest a new feature or enhancement
-labels: ['enhancement']
+description: Suggest a new feature or improvement
+labels: [enhancement]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Thanks for suggesting a feature! Please describe what you'd like.
   - type: textarea
-    id: problem
+    id: description
     attributes:
-      label: Problem
-      description: What problem does this feature solve?
+      label: Description
+      description: A clear description of the feature you'd like
     validations:
       required: true
   - type: textarea
-    id: solution
+    id: use-case
     attributes:
-      label: Proposed solution
-      description: How would you like it to work?
-      value: |
+      label: Use case
+      description: Why is this feature needed? What problem does it solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-api
+    attributes:
+      label: Proposed API
+      description: If applicable, show how you'd like the API to look
+      placeholder: |
         ```ruby
         require "philiprehberger/lock_kit"
-
-        # Your proposed API here
+        # proposed usage
         ```
     validations:
-      required: true
+      required: false
   - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered
-      description: Any alternative approaches you've considered
+      description: Any alternative solutions or features you've considered
     validations:
       required: false

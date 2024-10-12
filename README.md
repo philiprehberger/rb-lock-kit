@@ -4,7 +4,7 @@
 [![Gem Version](https://badge.fury.io/rb/philiprehberger-lock_kit.svg)](https://rubygems.org/gems/philiprehberger-lock_kit)
 [![Last updated](https://img.shields.io/github/last-commit/philiprehberger/rb-lock-kit)](https://github.com/philiprehberger/rb-lock-kit/commits/main)
 
-File-based and PID locking for process coordination with stale lock detection, read-write locks, and lock owner identification
+File-based and PID locking for process coordination with TTL expiration, stale detection, read-write locks, and lock owner identification
 
 ## Requirements
 
@@ -62,6 +62,23 @@ end
 Philiprehberger::LockKit.with_write_lock('/tmp/data.lock', timeout: 5) do
   # write shared data
 end
+```
+
+### Lock with TTL (Time-to-Live)
+
+```ruby
+# Lock expires after 30 seconds — treated as stale once elapsed
+Philiprehberger::LockKit.with_file_lock('/tmp/my.lock', ttl: 30) do
+  # work that should not hold the lock indefinitely
+end
+
+# PID locks also support TTL
+Philiprehberger::LockKit.with_pid_lock('my_worker', ttl: 60) do
+  # expires after 60 seconds
+end
+
+# Check if a lock has expired
+Philiprehberger::LockKit.expired?('/tmp/my.lock') # => true/false
 ```
 
 ### Automatic Stale Lock Cleanup
@@ -133,12 +150,13 @@ Philiprehberger::LockKit.stale?('/tmp/my_worker.pid')  # => true/false
 
 | Method | Description |
 |--------|-------------|
-| `.with_file_lock(path, timeout: nil, auto_cleanup: false, on_wait: nil) { }` | Execute block with exclusive file lock |
-| `.with_pid_lock(name, dir: Dir.tmpdir, auto_cleanup: false) { }` | Execute block with PID file lock |
+| `.with_file_lock(path, timeout: nil, auto_cleanup: false, on_wait: nil, ttl: nil) { }` | Execute block with exclusive file lock |
+| `.with_pid_lock(name, dir: Dir.tmpdir, auto_cleanup: false, ttl: nil) { }` | Execute block with PID file lock |
 | `.with_read_lock(path, timeout: nil) { }` | Execute block with shared read lock |
 | `.with_write_lock(path, timeout: nil) { }` | Execute block with exclusive write lock |
 | `.locked?(path)` | Check if a file is currently locked |
 | `.stale?(pid_file)` | Check if a PID file references a dead process |
+| `.expired?(path)` | Check if a lock has expired based on its TTL |
 | `.owner(path)` | Get lock owner metadata (pid, hostname, acquired_at) |
 | `.break!(path, force: false)` | Break a lock (stale only by default, any with force) |
 
@@ -147,9 +165,10 @@ Philiprehberger::LockKit.stale?('/tmp/my_worker.pid')  # => true/false
 | Method | Description |
 |--------|-------------|
 | `.new(path)` | Create a file lock instance |
-| `#acquire(timeout: nil, auto_cleanup: false, on_wait: nil)` | Acquire exclusive lock with optional timeout, cleanup, and wait callback |
+| `#acquire(timeout: nil, auto_cleanup: false, on_wait: nil, ttl: nil)` | Acquire exclusive lock with optional timeout, cleanup, wait callback, and TTL |
 | `#release` | Release the lock and close the file handle |
-| `#locked?` | Check if the file is currently locked |
+| `#locked?` | Check if the file is currently locked (false if expired) |
+| `#expired?` | Check if the lock has expired based on its TTL |
 | `#owner` | Get lock owner metadata |
 
 ### `LockKit::PidLock`
@@ -157,9 +176,10 @@ Philiprehberger::LockKit.stale?('/tmp/my_worker.pid')  # => true/false
 | Method | Description |
 |--------|-------------|
 | `.new(name, dir: Dir.tmpdir)` | Create a PID lock instance |
-| `#acquire(auto_cleanup: false)` | Acquire PID lock, raises if held by a living process |
+| `#acquire(auto_cleanup: false, ttl: nil)` | Acquire PID lock with optional TTL, raises if held by a living process |
 | `#release` | Release lock and remove PID file |
-| `#locked?` | Check if lock is held by a living process |
+| `#locked?` | Check if lock is held by a living process (false if expired) |
+| `#expired?` | Check if the lock has expired based on its TTL |
 | `#stale?` | Check if PID file references a dead process |
 | `#owner` | Get lock owner metadata |
 
