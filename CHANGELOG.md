@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-15
+
+### Added
+- `with_retry_lock(path, retries: 3, delay: 0.1, backoff: 2, timeout: nil, auto_cleanup: true, ttl: nil)` module method for lock acquisition with exponential backoff retries
+
 ## [0.3.0] - 2026-04-10
 
 ### Added

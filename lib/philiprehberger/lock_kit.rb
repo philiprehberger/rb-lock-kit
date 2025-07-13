@@ -89,6 +89,35 @@ module Philiprehberger
       end
     end
 
+    # Execute a block with a file lock, retrying with exponential backoff on failure
+    #
+    # @param path [String] path to the lock file
+    # @param retries [Integer] maximum number of attempts
+    # @param delay [Numeric] initial delay in seconds between retries
+    # @param backoff [Numeric] multiplier applied to delay after each failed attempt
+    # @param timeout [Numeric, nil] seconds to wait per acquire attempt
+    # @param auto_cleanup [Boolean] automatically remove stale locks before acquiring
+    # @param ttl [Numeric, nil] time-to-live in seconds; lock expires after this duration
+    # @yield block to execute while the lock is held
+    # @return [Object] the return value of the block
+    # @raise [Error] if all retry attempts are exhausted
+    def self.with_retry_lock(path, retries: 3, delay: 0.1, backoff: 2, timeout: nil, auto_cleanup: true, ttl: nil, &block)
+      attempts = 0
+      current_delay = delay
+
+      loop do
+        attempts += 1
+        begin
+          return with_file_lock(path, timeout: timeout, auto_cleanup: auto_cleanup, ttl: ttl, &block)
+        rescue Error
+          raise if attempts >= retries
+
+          sleep current_delay
+          current_delay *= backoff
+        end
+      end
+    end
+
     # Check if a file is currently locked by another process
     #
     # @param path [String] path to the lock file
