@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-28
+
+### Added
+- `LockKit.owner(path)` for inspecting lock holder metadata (PID, hostname, timestamp)
+- `auto_cleanup:` option for automatic stale lock removal
+- `LockKit.with_read_lock` and `LockKit.with_write_lock` for shared/exclusive locking
+- `on_wait:` callback option for monitoring lock contention
+- `LockKit.break!(path, force:)` for manual lock recovery
+
 ## [0.1.1] - 2026-03-26
 
 ### Added

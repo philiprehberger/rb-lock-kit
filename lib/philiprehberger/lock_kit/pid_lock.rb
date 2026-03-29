@@ -1,14 +1,16 @@
 # frozen_string_literal: true
 
+require 'json'
+require 'socket'
 require 'tmpdir'
 
 module Philiprehberger
   module LockKit
     # PID-file based lock with stale process detection
     #
-    # Writes the current process ID to a file. Other processes can check the
-    # file to determine if the lock holder is still alive, enabling automatic
-    # recovery from crashed processes.
+    # Writes the current process ID, hostname, and timestamp to a file in JSON
+    # format. Other processes can check the file to determine if the lock holder
+    # is still alive, enabling automatic recovery from crashed processes.
     class PidLock
       # @param name [String] lock name (used as the PID file basename)
       # @param dir [String] directory for the PID file (defaults to system tmpdir)
@@ -21,23 +23,32 @@ module Philiprehberger
 
       # Acquire the PID lock
       #
-      # Creates a PID file containing the current process ID. If a PID file
-      # already exists, checks whether the owning process is still alive. Stale
-      # PID files from dead processes are automatically cleaned up.
+      # Creates a PID file containing metadata (PID, hostname, timestamp) in
+      # JSON format. If a PID file already exists, checks whether the owning
+      # process is still alive. Stale PID files from dead processes are
+      # automatically cleaned up.
       #
+      # @param auto_cleanup [Boolean] when true, automatically remove stale locks
       # @return [true] when the lock is acquired
       # @raise [LockKit::Error] if the lock is held by a living process
-      def acquire
+      def acquire(auto_cleanup: false)
         if File.exist?(@pid_path)
           existing_pid = read_pid
 
-          raise Error, "Lock '#{@name}' is held by process #{existing_pid}" if existing_pid && process_alive?(existing_pid)
+          if existing_pid && process_alive?(existing_pid)
+            raise Error, "Lock '#{@name}' is held by process #{existing_pid}"
+          end
 
           # Stale PID file — remove it
           FileUtils.rm_f(@pid_path)
         end
 
-        File.write(@pid_path, Process.pid.to_s)
+        metadata = {
+          'pid' => Process.pid,
+          'hostname' => Socket.gethostname,
+          'acquired_at' => Time.now.iso8601
+        }
+        File.write(@pid_path, JSON.generate(metadata))
         @acquired = true
         true
       end
@@ -79,6 +90,17 @@ module Philiprehberger
         !process_alive?(pid)
       end
 
+      # Read lock owner metadata from the PID file
+      #
+      # @return [Hash, nil] hash with :pid, :hostname, :acquired_at keys or nil
+      def owner
+        return nil unless File.exist?(@pid_path)
+
+        read_metadata
+      rescue Errno::ENOENT
+        nil
+      end
+
       private
 
       # @return [Integer, nil]
@@ -86,8 +108,34 @@ module Philiprehberger
         content = File.read(@pid_path).strip
         return nil if content.empty?
 
+        # Try JSON format first
+        data = JSON.parse(content)
+        data.is_a?(Hash) ? data['pid'] : Integer(data)
+      rescue JSON::ParserError
+        # Fall back to plain PID format for backwards compatibility
         Integer(content)
       rescue ArgumentError, Errno::ENOENT
+        nil
+      end
+
+      # @return [Hash, nil] parsed metadata with symbolized keys
+      def read_metadata
+        content = File.read(@pid_path).strip
+        return nil if content.empty?
+
+        data = JSON.parse(content)
+        {
+          pid: data['pid'],
+          hostname: data['hostname'],
+          acquired_at: data['acquired_at'] ? Time.parse(data['acquired_at']) : nil
+        }
+      rescue JSON::ParserError
+        # Plain PID format — limited metadata
+        pid = Integer(content, exception: false)
+        return nil unless pid
+
+        { pid: pid, hostname: nil, acquired_at: nil }
+      rescue Errno::ENOENT
         nil
       end
 

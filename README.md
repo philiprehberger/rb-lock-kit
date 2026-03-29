@@ -2,10 +2,14 @@
 
 [![Tests](https://github.com/philiprehberger/rb-lock-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/philiprehberger/rb-lock-kit/actions/workflows/ci.yml)
 [![Gem Version](https://badge.fury.io/rb/philiprehberger-lock_kit.svg)](https://rubygems.org/gems/philiprehberger-lock_kit)
+[![GitHub release](https://img.shields.io/github/v/release/philiprehberger/rb-lock-kit)](https://github.com/philiprehberger/rb-lock-kit/releases)
+[![Last updated](https://img.shields.io/github/last-commit/philiprehberger/rb-lock-kit)](https://github.com/philiprehberger/rb-lock-kit/commits/main)
 [![License](https://img.shields.io/github/license/philiprehberger/rb-lock-kit)](LICENSE)
+[![Bug Reports](https://img.shields.io/github/issues/philiprehberger/rb-lock-kit/bug)](https://github.com/philiprehberger/rb-lock-kit/issues?q=is%3Aissue+is%3Aopen+label%3Abug)
+[![Feature Requests](https://img.shields.io/github/issues/philiprehberger/rb-lock-kit/enhancement)](https://github.com/philiprehberger/rb-lock-kit/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement)
 [![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-ec6cb9)](https://github.com/sponsors/philiprehberger)
 
-File-based and PID locking for process coordination
+File-based and PID locking for process coordination with stale lock detection, read-write locks, and lock owner identification.
 
 ## Requirements
 
@@ -16,7 +20,7 @@ File-based and PID locking for process coordination
 Add to your Gemfile:
 
 ```ruby
-gem "philiprehberger-lock_kit"
+gem 'philiprehberger-lock_kit'
 ```
 
 Or install directly:
@@ -28,9 +32,9 @@ gem install philiprehberger-lock_kit
 ## Usage
 
 ```ruby
-require "philiprehberger/lock_kit"
+require 'philiprehberger/lock_kit'
 
-Philiprehberger::LockKit.with_file_lock("/tmp/my.lock") do
+Philiprehberger::LockKit.with_file_lock('/tmp/my.lock') do
   # exclusive work here
 end
 ```
@@ -38,7 +42,7 @@ end
 ### File Locking with Timeout
 
 ```ruby
-Philiprehberger::LockKit.with_file_lock("/tmp/my.lock", timeout: 5) do
+Philiprehberger::LockKit.with_file_lock('/tmp/my.lock', timeout: 5) do
   # waits up to 5 seconds for the lock
 end
 ```
@@ -46,15 +50,67 @@ end
 ### PID File Locking
 
 ```ruby
-Philiprehberger::LockKit.with_pid_lock("my_worker") do
+Philiprehberger::LockKit.with_pid_lock('my_worker') do
   # only one process with this name can run at a time
 end
+```
+
+### Read-Write Locks
+
+```ruby
+# Multiple readers can hold the lock concurrently
+Philiprehberger::LockKit.with_read_lock('/tmp/data.lock', timeout: 5) do
+  # read shared data
+end
+
+# Write lock is exclusive — no readers or other writers allowed
+Philiprehberger::LockKit.with_write_lock('/tmp/data.lock', timeout: 5) do
+  # write shared data
+end
+```
+
+### Automatic Stale Lock Cleanup
+
+```ruby
+Philiprehberger::LockKit.with_file_lock('/tmp/my.lock', auto_cleanup: true) do
+  # automatically removes stale locks from dead processes
+end
+
+Philiprehberger::LockKit.with_pid_lock('my_worker', auto_cleanup: true) do
+  # same for PID locks
+end
+```
+
+### Lock Owner Identification
+
+```ruby
+info = Philiprehberger::LockKit.owner('/tmp/my.lock')
+# => { pid: 12345, hostname: 'web-01', acquired_at: 2026-03-28 12:00:00 +0000 }
+```
+
+### Lock Waiting with Callbacks
+
+```ruby
+Philiprehberger::LockKit.with_file_lock('/tmp/my.lock', timeout: 10, on_wait: ->(elapsed) { puts "Waiting #{elapsed}s..." }) do
+  # callback fires every 0.5s while waiting
+end
+```
+
+### Force Break Lock
+
+```ruby
+# Break stale locks only (raises if held by a live process)
+Philiprehberger::LockKit.break!('/tmp/my.lock')
+# => { broken: true, previous_owner: { pid: 12345, hostname: 'web-01', acquired_at: ... } }
+
+# Force break any lock regardless of status
+Philiprehberger::LockKit.break!('/tmp/my.lock', force: true)
 ```
 
 ### Manual File Lock
 
 ```ruby
-lock = Philiprehberger::LockKit::FileLock.new("/tmp/my.lock")
+lock = Philiprehberger::LockKit::FileLock.new('/tmp/my.lock')
 lock.acquire(timeout: 10)
 # ... do work ...
 lock.release
@@ -63,7 +119,7 @@ lock.release
 ### Manual PID Lock
 
 ```ruby
-lock = Philiprehberger::LockKit::PidLock.new("my_worker", dir: "/var/run")
+lock = Philiprehberger::LockKit::PidLock.new('my_worker', dir: '/var/run')
 lock.acquire
 # ... do work ...
 lock.release
@@ -72,8 +128,8 @@ lock.release
 ### Checking Lock Status
 
 ```ruby
-Philiprehberger::LockKit.locked?("/tmp/my.lock")    # => true/false
-Philiprehberger::LockKit.stale?("/tmp/my_worker.pid") # => true/false
+Philiprehberger::LockKit.locked?('/tmp/my.lock')      # => true/false
+Philiprehberger::LockKit.stale?('/tmp/my_worker.pid')  # => true/false
 ```
 
 ## API
@@ -82,29 +138,46 @@ Philiprehberger::LockKit.stale?("/tmp/my_worker.pid") # => true/false
 
 | Method | Description |
 |--------|-------------|
-| `.with_file_lock(path, timeout: nil) { }` | Execute block with exclusive file lock |
-| `.with_pid_lock(name, dir: Dir.tmpdir) { }` | Execute block with PID file lock |
+| `.with_file_lock(path, timeout: nil, auto_cleanup: false, on_wait: nil) { }` | Execute block with exclusive file lock |
+| `.with_pid_lock(name, dir: Dir.tmpdir, auto_cleanup: false) { }` | Execute block with PID file lock |
+| `.with_read_lock(path, timeout: nil) { }` | Execute block with shared read lock |
+| `.with_write_lock(path, timeout: nil) { }` | Execute block with exclusive write lock |
 | `.locked?(path)` | Check if a file is currently locked |
 | `.stale?(pid_file)` | Check if a PID file references a dead process |
+| `.owner(path)` | Get lock owner metadata (pid, hostname, acquired_at) |
+| `.break!(path, force: false)` | Break a lock (stale only by default, any with force) |
 
 ### `LockKit::FileLock`
 
 | Method | Description |
 |--------|-------------|
 | `.new(path)` | Create a file lock instance |
-| `#acquire(timeout: nil)` | Acquire exclusive lock, optional timeout in seconds |
+| `#acquire(timeout: nil, auto_cleanup: false, on_wait: nil)` | Acquire exclusive lock with optional timeout, cleanup, and wait callback |
 | `#release` | Release the lock and close the file handle |
 | `#locked?` | Check if the file is currently locked |
+| `#owner` | Get lock owner metadata |
 
 ### `LockKit::PidLock`
 
 | Method | Description |
 |--------|-------------|
 | `.new(name, dir: Dir.tmpdir)` | Create a PID lock instance |
-| `#acquire` | Acquire PID lock, raises if held by a living process |
+| `#acquire(auto_cleanup: false)` | Acquire PID lock, raises if held by a living process |
 | `#release` | Release lock and remove PID file |
 | `#locked?` | Check if lock is held by a living process |
 | `#stale?` | Check if PID file references a dead process |
+| `#owner` | Get lock owner metadata |
+
+### `LockKit::ReadWriteLock`
+
+| Method | Description |
+|--------|-------------|
+| `.new(path)` | Create a read-write lock instance |
+| `#acquire_read(timeout: nil)` | Acquire shared read lock |
+| `#release_read` | Release the read lock |
+| `#acquire_write(timeout: nil)` | Acquire exclusive write lock |
+| `#release_write` | Release the write lock |
+| `#reader_count` | Get current number of active readers |
 
 ## Development
 
@@ -113,6 +186,13 @@ bundle install
 bundle exec rspec
 bundle exec rubocop
 ```
+
+## Support
+
+If you find this package useful, consider giving it a star on GitHub — it helps motivate continued maintenance and development.
+
+[![LinkedIn](https://img.shields.io/badge/Philip%20Rehberger-LinkedIn-0A66C2?logo=linkedin)](https://www.linkedin.com/in/philiprehberger)
+[![More packages](https://img.shields.io/badge/more-open%20source%20packages-blue)](https://philiprehberger.com/open-source-packages)
 
 ## License
 
