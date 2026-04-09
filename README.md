@@ -4,7 +4,7 @@
 [![Gem Version](https://badge.fury.io/rb/philiprehberger-lock_kit.svg)](https://rubygems.org/gems/philiprehberger-lock_kit)
 [![Last updated](https://img.shields.io/github/last-commit/philiprehberger/rb-lock-kit)](https://github.com/philiprehberger/rb-lock-kit/commits/main)
 
-File-based and PID locking for process coordination with stale lock detection, read-write locks, and lock owner identification.
+File-based and PID locking for process coordination with stale lock detection, read-write locks, and lock owner identification
 
 ## Requirements
 
