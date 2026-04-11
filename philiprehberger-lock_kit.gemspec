@@ -7,8 +7,8 @@ Gem::Specification.new do |spec|
   spec.version = Philiprehberger::LockKit::VERSION
   spec.authors = ['Philip Rehberger']
   spec.email = ['me@philiprehberger.com']
-  spec.summary = 'File-based and PID locking for process coordination with stale lock detection, ' \
-                 'read-write locks, and lock owner identification'
+  spec.summary = 'File-based and PID locking for process coordination with TTL expiration, ' \
+                 'stale detection, read-write locks, and lock owner identification'
   spec.description = 'File locks using flock and PID file locks with stale detection for coordinating ' \
                      'between processes. Timeout support and automatic cleanup.'
   spec.homepage = 'https://philiprehberger.com/open-source-packages/ruby/philiprehberger-lock_kit'

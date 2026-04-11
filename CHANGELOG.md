@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-10
+
+### Added
+- `ttl:` option for `with_file_lock`, `with_pid_lock`, `FileLock#acquire`, and `PidLock#acquire` — locks auto-expire after the specified duration
+- `FileLock#expired?` and `PidLock#expired?` instance methods for checking TTL expiration
+- `LockKit.expired?(path)` module-level method for checking lock expiration
+- Stale lock cleanup now considers expired TTL locks as stale
+
+### Fixed
+- Align feature request issue template with guide structure
+
 ## [0.2.3] - 2026-04-09
 
 ### Fixed

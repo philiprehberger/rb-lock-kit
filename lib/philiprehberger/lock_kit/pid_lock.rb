@@ -29,18 +29,26 @@ module Philiprehberger
       # automatically cleaned up.
       #
       # @param auto_cleanup [Boolean] when true, automatically remove stale locks
+      # @param ttl [Numeric, nil] time-to-live in seconds; lock expires after this duration
       # @return [true] when the lock is acquired
       # @raise [LockKit::Error] if the lock is held by a living process
-      def acquire(auto_cleanup: false)
+      def acquire(auto_cleanup: false, ttl: nil)
+        @ttl = ttl
+
         if File.exist?(@pid_path)
-          existing_pid = read_pid
+          # Check TTL expiration first
+          if lock_expired?
+            FileUtils.rm_f(@pid_path)
+          else
+            existing_pid = read_pid
 
-          if existing_pid && process_alive?(existing_pid)
-            raise Error, "Lock '#{@name}' is held by process #{existing_pid}"
+            if existing_pid && process_alive?(existing_pid)
+              raise Error, "Lock '#{@name}' is held by process #{existing_pid}"
+            end
+
+            # Stale PID file — remove it
+            FileUtils.rm_f(@pid_path)
           end
-
-          # Stale PID file — remove it
-          FileUtils.rm_f(@pid_path)
         end
 
         metadata = {
@@ -48,6 +56,7 @@ module Philiprehberger
           'hostname' => Socket.gethostname,
           'acquired_at' => Time.now.iso8601
         }
+        metadata['expires_at'] = (Time.now + ttl).iso8601 if ttl
         File.write(@pid_path, JSON.generate(metadata))
         @acquired = true
         true
@@ -68,9 +77,12 @@ module Philiprehberger
 
       # Check whether the lock is currently held by a living process
       #
+      # Returns false if the lock has expired (TTL elapsed).
+      #
       # @return [Boolean]
       def locked?
         return false unless File.exist?(@pid_path)
+        return false if expired?
 
         pid = read_pid
         return false unless pid
@@ -90,6 +102,13 @@ module Philiprehberger
         !process_alive?(pid)
       end
 
+      # Check whether the lock has expired based on its TTL
+      #
+      # @return [Boolean] true if the lock metadata contains an expires_at time that has passed
+      def expired?
+        lock_expired?
+      end
+
       # Read lock owner metadata from the PID file
       #
       # @return [Hash, nil] hash with :pid, :hostname, :acquired_at keys or nil
@@ -102,6 +121,23 @@ module Philiprehberger
       end
 
       private
+
+      def lock_expired?
+        return false unless File.exist?(@pid_path)
+
+        content = File.read(@pid_path).strip
+        return false if content.empty?
+
+        data = JSON.parse(content)
+        return false unless data.is_a?(Hash)
+
+        expires_at = data['expires_at']
+        return false unless expires_at
+
+        Time.parse(expires_at) <= Time.now
+      rescue JSON::ParserError, Errno::ENOENT
+        false
+      end
 
       # @return [Integer, nil]
       def read_pid

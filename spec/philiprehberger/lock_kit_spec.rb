@@ -130,6 +130,58 @@ RSpec.describe Philiprehberger::LockKit do
       end
     end
 
+    describe 'TTL support' do
+      it 'writes expires_at to metadata when ttl is provided' do
+        lock.acquire(ttl: 60)
+        meta_path = "#{lock_path}.meta"
+        data = JSON.parse(File.read(meta_path))
+        expect(data['expires_at']).to be_a(String)
+        expect(Time.parse(data['expires_at'])).to be > Time.now
+        lock.release
+      end
+
+      it 'does not write expires_at when ttl is nil' do
+        lock.acquire
+        meta_path = "#{lock_path}.meta"
+        data = JSON.parse(File.read(meta_path))
+        expect(data).not_to have_key('expires_at')
+        lock.release
+      end
+
+      it 'reports expired? as false before TTL elapses' do
+        lock.acquire(ttl: 60)
+        expect(lock.expired?).to be false
+        lock.release
+      end
+
+      it 'reports expired? as true after TTL elapses' do
+        lock.acquire(ttl: 0.1)
+        sleep 0.2
+        expect(lock.expired?).to be true
+        lock.release
+      end
+
+      it 'reports locked? as false when TTL has elapsed' do
+        lock.acquire(ttl: 0.1)
+        sleep 0.2
+        lock2 = described_class.new(lock_path)
+        expect(lock2.locked?).to be false
+        lock.release
+      end
+
+      it 'cleans up expired locks with auto_cleanup' do
+        lock.acquire(ttl: 0.1)
+        sleep 0.2
+        # Release without cleanup to leave stale metadata
+        lock.instance_variable_get(:@file)&.flock(File::LOCK_UN)
+        lock.instance_variable_get(:@file)&.close
+
+        lock2 = described_class.new(lock_path)
+        expect(lock2.acquire(auto_cleanup: true)).to be true
+        lock2.release
+      end
+    end
+
     describe 'concurrent access' do
       it 'allows re-acquiring after release' do
         lock.acquire
@@ -218,6 +270,54 @@ RSpec.describe Philiprehberger::LockKit do
 
         expect(lock.acquire(auto_cleanup: true)).to be true
         lock.release
+      end
+    end
+
+    describe 'TTL support' do
+      it 'writes expires_at to metadata when ttl is provided' do
+        lock.acquire(ttl: 60)
+        pid_file = File.join(tmp_dir, "#{lock_name}.pid")
+        data = JSON.parse(File.read(pid_file))
+        expect(data['expires_at']).to be_a(String)
+        expect(Time.parse(data['expires_at'])).to be > Time.now
+        lock.release
+      end
+
+      it 'does not write expires_at when ttl is nil' do
+        lock.acquire
+        pid_file = File.join(tmp_dir, "#{lock_name}.pid")
+        data = JSON.parse(File.read(pid_file))
+        expect(data).not_to have_key('expires_at')
+        lock.release
+      end
+
+      it 'reports expired? as false before TTL elapses' do
+        lock.acquire(ttl: 60)
+        expect(lock.expired?).to be false
+        lock.release
+      end
+
+      it 'reports expired? as true after TTL elapses' do
+        lock.acquire(ttl: 0.1)
+        sleep 0.2
+        expect(lock.expired?).to be true
+        lock.release
+      end
+
+      it 'reports locked? as false when TTL has elapsed' do
+        lock.acquire(ttl: 0.1)
+        sleep 0.2
+        expect(lock.locked?).to be false
+        lock.release
+      end
+
+      it 'allows acquiring an expired lock' do
+        lock.acquire(ttl: 0.1)
+        sleep 0.2
+
+        other = described_class.new(lock_name, dir: tmp_dir)
+        expect(other.acquire).to be true
+        other.release
       end
     end
 
@@ -333,6 +433,11 @@ RSpec.describe Philiprehberger::LockKit do
   end
 
   describe '.with_file_lock' do
+    it 'accepts ttl option' do
+      result = described_class.with_file_lock(lock_path, ttl: 60) { 'ttl' }
+      expect(result).to eq('ttl')
+    end
+
     it 'executes the block and returns its value' do
       result = described_class.with_file_lock(lock_path) { 42 }
       expect(result).to eq(42)
@@ -368,6 +473,11 @@ RSpec.describe Philiprehberger::LockKit do
   end
 
   describe '.with_pid_lock' do
+    it 'accepts ttl option' do
+      result = described_class.with_pid_lock("ttl_test_#{Process.pid}", dir: tmp_dir, ttl: 60) { 'pid_ttl' }
+      expect(result).to eq('pid_ttl')
+    end
+
     it 'executes the block with a PID lock' do
       result = described_class.with_pid_lock("block_test_#{Process.pid}", dir: tmp_dir) { 99 }
       expect(result).to eq(99)
@@ -455,6 +565,43 @@ RSpec.describe Philiprehberger::LockKit do
       pid_file = File.join(tmp_dir, 'alive.pid')
       File.write(pid_file, Process.pid.to_s)
       expect(described_class.stale?(pid_file)).to be false
+    end
+  end
+
+  describe '.expired?' do
+    it 'returns false when no lock exists' do
+      expect(described_class.expired?(lock_path)).to be false
+    end
+
+    it 'returns false for a lock without TTL' do
+      meta_path = "#{lock_path}.meta"
+      data = { 'pid' => Process.pid, 'hostname' => 'test', 'acquired_at' => Time.now.iso8601 }
+      File.write(meta_path, JSON.generate(data))
+      expect(described_class.expired?(lock_path)).to be false
+    end
+
+    it 'returns false for a lock with future expiry' do
+      meta_path = "#{lock_path}.meta"
+      data = { 'pid' => Process.pid, 'hostname' => 'test', 'acquired_at' => Time.now.iso8601,
+               'expires_at' => (Time.now + 3600).iso8601 }
+      File.write(meta_path, JSON.generate(data))
+      expect(described_class.expired?(lock_path)).to be false
+    end
+
+    it 'returns true for a lock with past expiry' do
+      meta_path = "#{lock_path}.meta"
+      data = { 'pid' => Process.pid, 'hostname' => 'test', 'acquired_at' => Time.now.iso8601,
+               'expires_at' => (Time.now - 10).iso8601 }
+      File.write(meta_path, JSON.generate(data))
+      expect(described_class.expired?(lock_path)).to be true
+    end
+
+    it 'returns true for a PID lock with past expiry' do
+      pid_file = File.join(tmp_dir, 'expired.pid')
+      data = { 'pid' => Process.pid, 'hostname' => 'test', 'acquired_at' => Time.now.iso8601,
+               'expires_at' => (Time.now - 10).iso8601 }
+      File.write(pid_file, JSON.generate(data))
+      expect(described_class.expired?(pid_file)).to be true
     end
   end
 

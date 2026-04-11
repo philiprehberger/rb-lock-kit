@@ -22,9 +22,12 @@ module Philiprehberger
       # @param timeout [Numeric, nil] seconds to wait before raising; nil means non-blocking single attempt
       # @param auto_cleanup [Boolean] when true, check for stale locks and remove them
       # @param on_wait [Proc, nil] callback invoked every 0.5s while waiting; receives elapsed seconds
+      # @param ttl [Numeric, nil] time-to-live in seconds; lock expires after this duration
       # @return [true] when the lock is acquired
       # @raise [LockKit::Error] if the lock cannot be acquired
-      def acquire(timeout: nil, auto_cleanup: false, on_wait: nil)
+      def acquire(timeout: nil, auto_cleanup: false, on_wait: nil, ttl: nil)
+        @ttl = ttl
+
         if auto_cleanup
           cleanup_stale_lock
         end
@@ -79,10 +82,12 @@ module Philiprehberger
       #
       # Opens the file, attempts a non-blocking exclusive lock, and immediately
       # releases it. Returns true if the lock attempt fails (file is locked).
+      # Returns false if the lock has expired (TTL elapsed).
       #
       # @return [Boolean]
       def locked?
         return false unless File.exist?(@path)
+        return false if expired?
 
         f = File.open(@path, File::CREAT | File::RDWR)
         got_lock = f.flock(File::LOCK_EX | File::LOCK_NB)
@@ -94,6 +99,24 @@ module Philiprehberger
           f.close
           true
         end
+      end
+
+      # Check whether the lock has expired based on its TTL
+      #
+      # @return [Boolean] true if the lock metadata contains an expires_at time that has passed
+      def expired?
+        return false unless File.exist?(@meta_path)
+
+        content = File.read(@meta_path).strip
+        return false if content.empty?
+
+        data = JSON.parse(content)
+        expires_at = data['expires_at']
+        return false unless expires_at
+
+        Time.parse(expires_at) <= Time.now
+      rescue JSON::ParserError, Errno::ENOENT
+        false
       end
 
       # Read lock owner metadata
@@ -123,6 +146,7 @@ module Philiprehberger
           'hostname' => Socket.gethostname,
           'acquired_at' => Time.now.iso8601
         }
+        metadata['expires_at'] = (Time.now + @ttl).iso8601 if @ttl
         File.write(@meta_path, JSON.generate(metadata))
       end
 
@@ -142,6 +166,15 @@ module Philiprehberger
         return if content.empty?
 
         data = JSON.parse(content)
+
+        # Check TTL expiration
+        expires_at = data['expires_at']
+        if expires_at && Time.parse(expires_at) <= Time.now
+          FileUtils.rm_f(meta_path)
+          return
+        end
+
+        # Check process liveness
         pid = data['pid']
         return unless pid
 
