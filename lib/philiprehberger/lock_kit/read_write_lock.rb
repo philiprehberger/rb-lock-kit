@@ -126,8 +126,9 @@ module Philiprehberger
         0
       end
 
-      private
-
+      # Non-blocking check for whether a write lock is currently held.
+      #
+      # @return [Boolean]
       def write_locked?
         return false unless File.exist?(@write_lock_path)
 
@@ -141,6 +142,13 @@ module Philiprehberger
           f.close
           true
         end
+      end
+
+      # Snapshot of the current lock state: readers and writer presence.
+      #
+      # @return [Hash] `{ readers: Integer, write_locked: Boolean }`
+      def stats
+        { readers: reader_count, write_locked: write_locked? }
       end
 
       def increment_readers

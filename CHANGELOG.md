@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-21
+
+### Added
+- `ReadWriteLock#write_locked?` promoted to a public non-blocking query method
+- `ReadWriteLock#stats` returning `{ readers:, write_locked: }` snapshot
+- `LockKit.rw_stats(path)` module-level helper for the same snapshot without an instance
+
 ## [0.4.0] - 2026-04-15
 
 ### Added
