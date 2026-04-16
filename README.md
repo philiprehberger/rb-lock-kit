@@ -64,6 +64,20 @@ Philiprehberger::LockKit.with_write_lock('/tmp/data.lock', timeout: 5) do
 end
 ```
 
+### Retry Lock
+
+```ruby
+# Retries lock acquisition with exponential backoff
+Philiprehberger::LockKit.with_retry_lock('/tmp/my.lock', retries: 5, delay: 0.2, backoff: 2) do
+  # acquired after retrying if initially contended
+end
+
+# With timeout per attempt, TTL, and custom cleanup
+Philiprehberger::LockKit.with_retry_lock('/tmp/my.lock', retries: 3, delay: 0.1, backoff: 2, timeout: 5, ttl: 30) do
+  # each attempt waits up to 5s; lock expires after 30s
+end
+```
+
 ### Lock with TTL (Time-to-Live)
 
 ```ruby
@@ -151,6 +165,7 @@ Philiprehberger::LockKit.stale?('/tmp/my_worker.pid')  # => true/false
 | Method | Description |
 |--------|-------------|
 | `.with_file_lock(path, timeout: nil, auto_cleanup: false, on_wait: nil, ttl: nil) { }` | Execute block with exclusive file lock |
+| `.with_retry_lock(path, retries: 3, delay: 0.1, backoff: 2, timeout: nil, auto_cleanup: true, ttl: nil) { }` | Execute block with file lock, retrying with exponential backoff |
 | `.with_pid_lock(name, dir: Dir.tmpdir, auto_cleanup: false, ttl: nil) { }` | Execute block with PID file lock |
 | `.with_read_lock(path, timeout: nil) { }` | Execute block with shared read lock |
 | `.with_write_lock(path, timeout: nil) { }` | Execute block with exclusive write lock |

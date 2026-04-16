@@ -537,6 +537,56 @@ RSpec.describe Philiprehberger::LockKit do
     end
   end
 
+  describe '.with_retry_lock' do
+    it 'acquires lock on first try and returns block value' do
+      result = described_class.with_retry_lock(lock_path) { 'first_try' }
+      expect(result).to eq('first_try')
+    end
+
+    it 'retries and succeeds after initial failure' do
+      lock = Philiprehberger::LockKit::FileLock.new(lock_path)
+      lock.acquire
+
+      attempt = 0
+      allow(described_class).to receive(:with_file_lock).and_wrap_original do |method, *args, **kwargs, &blk|
+        attempt += 1
+        if attempt == 1
+          raise Philiprehberger::LockKit::Error, 'lock held'
+        end
+
+        method.call(*args, **kwargs, &blk)
+      end
+
+      lock.release
+
+      result = described_class.with_retry_lock(lock_path, retries: 3, delay: 0.01) { 'recovered' }
+      expect(result).to eq('recovered')
+      expect(attempt).to eq(2)
+    end
+
+    it 'raises Error when all retries are exhausted' do
+      allow(described_class).to receive(:with_file_lock).and_raise(Philiprehberger::LockKit::Error, 'lock held')
+
+      expect do
+        described_class.with_retry_lock(lock_path, retries: 3, delay: 0.01) { 'never' }
+      end.to raise_error(Philiprehberger::LockKit::Error, 'lock held')
+    end
+
+    it 'passes timeout, auto_cleanup, and ttl to with_file_lock' do
+      expect(described_class).to receive(:with_file_lock)
+        .with(lock_path, timeout: 2, auto_cleanup: false, ttl: 30)
+        .and_yield
+
+      described_class.with_retry_lock(lock_path, timeout: 2, auto_cleanup: false, ttl: 30) { 'ok' }
+    end
+
+    it 'releases the lock after the block' do
+      described_class.with_retry_lock(lock_path, delay: 0.01) { 'work' }
+      lock = Philiprehberger::LockKit::FileLock.new(lock_path)
+      expect(lock.locked?).to be false
+    end
+  end
+
   describe '.locked?' do
     it 'returns false for an unlocked file' do
       expect(described_class.locked?(lock_path)).to be false
