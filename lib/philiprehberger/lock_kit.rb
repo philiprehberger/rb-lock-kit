@@ -126,6 +126,14 @@ module Philiprehberger
       FileLock.new(path).locked?
     end
 
+    # Snapshot of read-write lock state for `path` as `{ readers:, write_locked: }`.
+    #
+    # @param path [String] base path used with `with_read_lock` / `with_write_lock`
+    # @return [Hash] `{ readers: Integer, write_locked: Boolean }`
+    def self.rw_stats(path)
+      ReadWriteLock.new(path).stats
+    end
+
     # Check if a PID file references a dead process
     #
     # @param pid_file [String] path to the PID file

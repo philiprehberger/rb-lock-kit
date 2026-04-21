@@ -174,6 +174,7 @@ Philiprehberger::LockKit.stale?('/tmp/my_worker.pid')  # => true/false
 | `.expired?(path)` | Check if a lock has expired based on its TTL |
 | `.owner(path)` | Get lock owner metadata (pid, hostname, acquired_at) |
 | `.break!(path, force: false)` | Break a lock (stale only by default, any with force) |
+| `.rw_stats(path)` | Snapshot of a read-write lock as `{ readers:, write_locked: }` |
 
 ### `LockKit::FileLock`
 
@@ -208,6 +209,8 @@ Philiprehberger::LockKit.stale?('/tmp/my_worker.pid')  # => true/false
 | `#acquire_write(timeout: nil)` | Acquire exclusive write lock |
 | `#release_write` | Release the write lock |
 | `#reader_count` | Get current number of active readers |
+| `#write_locked?` | Non-blocking check for an active write lock |
+| `#stats` | Snapshot as `{ readers:, write_locked: }` |
 
 ## Development
 

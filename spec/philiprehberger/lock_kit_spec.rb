@@ -430,6 +430,47 @@ RSpec.describe Philiprehberger::LockKit do
         expect(rw_lock.reader_count).to eq(0)
       end
     end
+
+    describe '#write_locked?' do
+      it 'returns false when no write lock is held' do
+        expect(rw_lock.write_locked?).to be false
+      end
+
+      it 'returns true while a write lock is held' do
+        described_class.new(rw_path).acquire_write
+        begin
+          other = described_class.new(rw_path)
+          expect(other.write_locked?).to be true
+        ensure
+          rw_lock.release_write
+        end
+      end
+    end
+
+    describe '#stats' do
+      it 'reports zero readers and no writer on an idle lock' do
+        expect(rw_lock.stats).to eq(readers: 0, write_locked: false)
+      end
+
+      it 'reports active readers' do
+        rw_lock.acquire_read
+        begin
+          expect(rw_lock.stats).to eq(readers: 1, write_locked: false)
+        ensure
+          rw_lock.release_read
+        end
+      end
+
+      it 'reports a held write lock' do
+        rw_lock.acquire_write
+        begin
+          other = described_class.new(rw_path)
+          expect(other.stats).to eq(readers: 0, write_locked: true)
+        ensure
+          rw_lock.release_write
+        end
+      end
+    end
   end
 
   describe '.with_file_lock' do
@@ -590,6 +631,24 @@ RSpec.describe Philiprehberger::LockKit do
   describe '.locked?' do
     it 'returns false for an unlocked file' do
       expect(described_class.locked?(lock_path)).to be false
+    end
+  end
+
+  describe '.rw_stats' do
+    let(:rw_path) { File.join(tmp_dir, 'rw_stats.lock') }
+
+    it 'reports zero readers and no writer on a fresh path' do
+      expect(described_class.rw_stats(rw_path)).to eq(readers: 0, write_locked: false)
+    end
+
+    it 'reports active readers and write status' do
+      rw = Philiprehberger::LockKit::ReadWriteLock.new(rw_path)
+      rw.acquire_read
+      begin
+        expect(described_class.rw_stats(rw_path)).to eq(readers: 1, write_locked: false)
+      ensure
+        rw.release_read
+      end
     end
   end
 
