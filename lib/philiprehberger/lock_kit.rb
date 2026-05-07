@@ -226,6 +226,17 @@ module Philiprehberger
       nil
     end
 
+    # Get the age in seconds of an active lock based on its `acquired_at` metadata
+    #
+    # @param path [String] path to the lock file or PID file
+    # @return [Float, nil] age in seconds, or nil if not locked or `acquired_at` is missing
+    def self.age(path)
+      data = owner(path)
+      return nil unless data && data[:acquired_at]
+
+      Time.now - data[:acquired_at]
+    end
+
     # Force break a lock
     #
     # @param path [String] path to the lock file or PID file

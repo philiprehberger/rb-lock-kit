@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-07
+
+### Added
+- `LockKit.age(path)` — returns the age in seconds of an active lock based on its `acquired_at` metadata, or `nil` if not locked or metadata is missing.
+
 ## [0.5.0] - 2026-04-21
 
 ### Added

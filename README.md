@@ -114,6 +114,14 @@ info = Philiprehberger::LockKit.owner('/tmp/my.lock')
 # => { pid: 12345, hostname: 'web-01', acquired_at: 2026-03-28 12:00:00 +0000 }
 ```
 
+### Lock Age
+
+```ruby
+# Returns the age in seconds (Float) of an active lock, or nil if not locked
+Philiprehberger::LockKit.age('/tmp/my.lock')
+# => 12.34
+```
+
 ### Lock Waiting with Callbacks
 
 ```ruby
@@ -173,6 +181,7 @@ Philiprehberger::LockKit.stale?('/tmp/my_worker.pid')  # => true/false
 | `.stale?(pid_file)` | Check if a PID file references a dead process |
 | `.expired?(path)` | Check if a lock has expired based on its TTL |
 | `.owner(path)` | Get lock owner metadata (pid, hostname, acquired_at) |
+| `.age(path)` | Age in seconds of an active lock, or nil if not locked |
 | `.break!(path, force: false)` | Break a lock (stale only by default, any with force) |
 | `.rw_stats(path)` | Snapshot of a read-write lock as `{ readers:, write_locked: }` |
 

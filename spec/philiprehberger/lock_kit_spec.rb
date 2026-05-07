@@ -748,6 +748,41 @@ RSpec.describe Philiprehberger::LockKit do
     end
   end
 
+  describe '.age' do
+    it 'returns nil when the path does not exist' do
+      expect(described_class.age(File.join(tmp_dir, 'nonexistent.lock'))).to be_nil
+    end
+
+    it 'returns a positive Float close to the elapsed time when a file lock is held' do
+      lock = Philiprehberger::LockKit::FileLock.new(lock_path)
+      lock.acquire
+      sleep 0.2
+      age = described_class.age(lock_path)
+      expect(age).to be_a(Float)
+      expect(age).to be > 0.1
+      expect(age).to be < 30
+      lock.release
+    end
+
+    it 'returns nil when metadata is missing acquired_at' do
+      meta_path = "#{lock_path}.meta"
+      data = { 'pid' => Process.pid, 'hostname' => 'test' }
+      File.write(meta_path, JSON.generate(data))
+      expect(described_class.age(lock_path)).to be_nil
+    end
+
+    it 'works with PID locks' do
+      name = "age_pid_test_#{Process.pid}"
+      described_class.with_pid_lock(name, dir: tmp_dir) do
+        sleep 0.1
+        pid_file = File.join(tmp_dir, "#{name}.pid")
+        age = described_class.age(pid_file)
+        expect(age).to be_a(Float)
+        expect(age).to be > 0
+      end
+    end
+  end
+
   describe '.break!' do
     it 'returns not locked when no lock exists' do
       result = described_class.break!(lock_path)
